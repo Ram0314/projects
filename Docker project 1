@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+    tools {
+        jdk 'jdk17'
+        nodejs 'nodejs16'
+    }
+    environment {
+        SCANNER_HOME=tool 'mysonar'
+    }
+    stages {
+        stage ("clean Workspace") {
+            steps {
+                cleanWs()
+            }
+        }
+        stage ("code") {
+            steps {
+                git branch: 'main', url: 'https://github.com/Ram0314/Zomato-Repo.git'
+            }
+        }
+        stage ("QCA") {
+            steps {
+                 withSonarQubeEnv('mysonar') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=zomato \
+                    -Dsonar.projectKey=zomato '''
+                }
+            }
+        }
+        stage ("Quality gates ") {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                }
+            }
+        }
+        stage ("code build") {
+            steps {
+                sh 'npm install'
+            }
+        }
+        stage ("owsap") {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'Dp-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        stage ("Dockerfile build") {
+            steps {
+                sh 'docker build -t reddy0314/zomato:v1 .'
+            }
+        }
+        stage ("trivy fs file") {
+            steps {
+                sh 'trivy fs . > trivyfs.txt'
+            }
+        }
+        stage ("trivy scan") {
+            steps {
+                sh 'trivy image reddy0314/zomato:v1'
+            }
+        }
+        stage ("dockerhub push") {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'dockerhuub') {
+                        sh 'docker push reddy0314/zomato:v1'
+                    }
+                } 
+            }
+        }
+        stage ("deploy") {
+            steps {
+                sh 'docker run -itd --name swiggy -p 2222:3000 reddy0314/zomato:v1'
+            }
+        }
+    }
+}
