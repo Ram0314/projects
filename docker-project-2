@@ -1,3 +1,23 @@
+Tools used:
+GitHub
+Jenkins
+Docker
+OWASP
+Trivy
+Sonarqube
+NodeJS
+-------------------------------------------------------------------------------------------
+Install sonarcube:
+   docker run -d --name sonar -p 9000:9000 sonarqube:lts-community
+install Trivy :
+     wget https://github.com/aquasecurity/trivy/releases/download/v0.18.3/trivy_0.18.3_Linux-64bit.tar.gz
+     tar zxvf trivy_0.18.3_Linux-64bit.tar.gz
+     sudo mv trivy /usr/local/bin/
+     echo 'export PATH=$PATH:/usr/local/bin/' >> ~/.bashrc
+    source .bashrc
+    trivy --version
+
+--------------------------------------------------------------------------------------------------
 pipeline {
     agent any
     tools {
@@ -14,7 +34,7 @@ pipeline {
             steps {
                 cleanWs()
             }
-        }
+        } 
         stage ("code") {
             steps {
                git 'https://github.com/Ram0314/dockerwebapp.git' 
@@ -35,8 +55,8 @@ pipeline {
         }
         stage ("build") {
             steps {
-                sh 'mvn clean package'
-                sh 'cp -r target Docker-app'
+                sh 'mvn clean package'  # build the maven file 
+                sh 'cp -r target Docker-app'  # need to move target file to docker-app because docker file is in docker app
             }
         }
         stage ("owasp") {
@@ -72,14 +92,14 @@ pipeline {
                 }
             }
         }
-        stage ("deploy") {
+        stage ("deploy") {    # execute command in compose file 
             steps {
                 sh 'docker-compose up -d'
             }
         }
     }
-    post {
-         always {
+    post {    
+    always {
             echo "Stack Notifications"
             slackSend(channel: 'docker',message: "${currentBuild.currentResult}: Job ${env.JOB_NAME} \nBuild Number: ${env.BUILD_NUMBER}\nMore info at: ${env.BUILD_URL}")
         }
