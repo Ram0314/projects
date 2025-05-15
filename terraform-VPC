@@ -1,0 +1,54 @@
+provider "aws" {
+region = "us-east-1"
+}
+
+---------------------------------------------
+Vim main.tf
+
+resource "aws_vpc" "myvpc" {
+tags = {
+Name = "vpc"
+}
+cidr_block = "10.0.0.0/16"
+instance_tenancy = "default"
+enable_dns_hostnames = "true"
+}
+
+
+resource "aws_subnet" "mysubnet" {
+# still we are not created vpc so we are mention vpc id.
+vpc_id = aws_vpc.myvpc.id
+tags = {
+Name = "subnet"
+}
+cidr_block = "10.0.1.0/24"
+availability_zone = "us-east-1a"
+}
+
+
+resource "aws_internet_gateway" "myigw" {
+tags = {
+Name = "igw"
+}
+# we are attaching vpc in internet gateway.
+vpc_id = aws_vpc.myvpc.id
+}
+
+
+resource "aws_route_table" "myroute" {
+vpc_id = aws_vpc.myvpc.id
+tags = {
+Name = "route"
+}
+route {
+cidr_block = "0.0.0.0/0"
+#We are attchng igw to route table 
+gateway_id = aws_internet_gateway.myigw.id
+}
+}
+
+# route table association
+resource "aws_route_table_association" "assoc" {
+subnet_id = aws_subnet.mysubnet.id
+route_table_id = aws_route_table.myroute.id
+}
