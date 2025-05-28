@@ -1,0 +1,100 @@
+pipeline {
+    agent any
+    tools {
+        maven 'mymaven'
+        jdk 'jdk17'
+        nodejs 'nodejs16'
+    }
+    environment {
+        SCANNER_HOME=tool 'mysonar'
+    }
+
+    stages {
+        stage('cleanws') {
+            steps {
+                cleanWs()
+            }
+        }
+        stage ('code') {
+            steps {
+                git 'https://github.com/Ram0314/dockerwebapp.git'
+            }
+        }
+        stage ('QCA') {
+            steps {
+                withSonarQubeEnv('mysonar') {
+                      sh '''
+                         mvn clean verify sonar:sonar \
+                         -Dsonar.projectKey=docker \
+                         -Dsonar.host.url=http://35.168.19.231:9000 \
+                         -Dsonar.login=sqa_8010e78f6029246bc2b74635ee7f244886781b6a
+                      '''
+                }
+            }
+        }
+        stage ('quality gates') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar'
+                }
+            }
+        }
+        stage ('build') {
+            steps {
+                sh 'mvn clean package'
+                sh 'cp -r target Docker-app'
+            }
+        }
+        stage ('owasp') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'Dp-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        stage ('imagebuild') {
+            steps {
+                sh 'docker build -t reddy0314/project:app Docker-app'
+                sh 'docker build -t reddy0314/project:db Docker-db'
+            }
+        }
+        stage ('trivy file') {
+            steps {
+                sh 'trivy fs .> trivyfs.txt'
+            }
+        }
+        stage ('trivy scan') {
+            steps {
+                sh 'trivy image reddy0314/project:app'
+                sh 'trivy image reddy0314/project:db'
+            }
+        }
+        stage ('dockerhub push') {
+            steps {
+                script {
+                     withDockerRegistry(credentialsId: 'docker') {
+                         sh 'docker push reddy0314/project:app'
+                         sh 'docker push reddy0314/project:db'
+                }        
+             }
+            }
+        }
+    }
+     post {
+        success {
+            emailext(
+                subject: "Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Good news! The build was successful.\n\nCheck: ${env.BUILD_URL}",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+                to: 'yattapuram143@gmail.com'
+            )
+        }
+        failure {
+            emailext(
+                subject: "Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Oops! The build failed.\n\nCheck: ${env.BUILD_URL}",
+                to: 'yattapuram143@gmail.com'
+            )
+        }
+    }
+}
+
